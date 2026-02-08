@@ -1,85 +1,83 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { TelegramClient } = require('telegram');
-const { StringSession } = require('telegram/sessions');
-
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-// Config
-const API_ID = parseInt(process.env.API_ID);
-const API_HASH = process.env.API_HASH;
-
-console.log('🔧 Config Check:', {
-  API_ID: API_ID || '❌ MISSING',
-  API_HASH: API_HASH ? '✅ Set' : '❌ MISSING'
+// Log semua request
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`, req.body);
+  next();
 });
 
-app.post('/send-otp', async (req, res) => {
-  const { phone } = req.body;
-  
-  // ================== REAL OTP ==================
-  if (API_ID && API_HASH) {
-    try {
-      console.log(`📱 Attempting REAL OTP to: ${phone}`);
-      
-      const client = new TelegramClient(new StringSession(''), API_ID, API_HASH, {
-        connectionRetries: 5,
-      });
-      
-      await client.connect();
-      
-      // KIRIM OTP ASLI DARI TELEGRAM
-      const result = await client.sendCode({
-        apiId: API_ID,
-        apiHash: API_HASH,
-        phoneNumber: phone,
-      });
-      
-      console.log(`✅ REAL OTP sent! Hash: ${result.phoneCodeHash}`);
-      
-      await client.disconnect();
-      
-      return res.json({
-        success: true,
-        message: '✅ REAL OTP sent to your Telegram app!',
-        phone: phone,
-        method: 'REAL_TELEGRAM_API',
-        note: 'Check your Telegram app notifications'
-      });
-      
-    } catch (error) {
-      console.error('❌ Telegram API Error:', error.message);
-      
-      // Fallback ke simulation
-      const simCode = Math.floor(10000 + Math.random() * 90000);
-      return res.json({
-        success: true,
-        message: 'OTP simulation (API failed)',
-        phone: phone,
-        simulated_code: simCode,
-        method: 'SIMULATION_FALLBACK',
-        error: error.message
-      });
-    }
-  }
-  
-  // ================== SIMULATION ==================
-  const simCode = Math.floor(10000 + Math.random() * 90000);
-  console.log(`🎮 Simulation for ${phone}: ${simCode}`);
-  
+// Root endpoint
+app.get('/', (req, res) => {
   res.json({
-    success: true,
-    message: 'OTP simulation mode',
-    phone: phone,
-    simulated_code: simCode,
-    method: 'SIMULATION',
-    note: 'Set API_ID & API_HASH for real OTP'
+    status: 'OTP Server ONLINE',
+    endpoints: {
+      send_otp: 'POST /send-otp - Send OTP code',
+      health: 'GET /health - Server health check'
+    },
+    time: new Date().toISOString()
   });
 });
 
-app.listen(3000, () => {
-  console.log('✅ OTP Server ready on port 3000');
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// Send OTP endpoint (SIMULATION MODE)
+app.post('/send-otp', (req, res) => {
+  try {
+    const { phone } = req.body;
+    
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number is required'
+      });
+    }
+    
+    console.log(`📱 OTP Request for: ${phone}`);
+    
+    // Generate random OTP
+    const otpCode = Math.floor(10000 + Math.random() * 90000);
+    
+    // Log untuk debugging
+    console.log(`🎮 Generated OTP for ${phone}: ${otpCode}`);
+    
+    // Response
+    res.json({
+      success: true,
+      message: 'OTP code generated successfully',
+      phone: phone,
+      otp_code: otpCode,
+      note: 'Simulation mode - User must enter this code manually',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error in /send-otp:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
+// Test endpoint
+app.post('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Test endpoint working',
+    received: req.body
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ OTP Server running on port ${PORT}`);
+  console.log(`🌐 Server is ready to accept requests`);
 });
